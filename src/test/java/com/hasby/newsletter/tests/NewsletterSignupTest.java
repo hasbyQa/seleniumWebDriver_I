@@ -3,12 +3,19 @@ package com.hasby.newsletter.tests;
 import com.hasby.newsletter.base.BaseTest;
 import com.hasby.newsletter.pages.SignupPage;
 import com.hasby.newsletter.pages.SuccessModalPage;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Severity;
+import io.qameta.allure.SeverityLevel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@Epic("Newsletter Application")
+@Feature("Signup Form")
+@DisplayName("Newsletter Signup Tests")
 public class NewsletterSignupTest extends BaseTest {
     //    Test data
     private static final String VALID_EMAIL = "test@example.com";
@@ -25,6 +32,7 @@ public class NewsletterSignupTest extends BaseTest {
 
     // POSITIVE TESTS (Happy Path)
     @Test
+    @Severity(SeverityLevel.CRITICAL)
     @DisplayName("P1 - Verify you subscribe successfully with valid email")
     void testSuccessfulSubscription(){
         logger.info("TEST: Successful subscription with valid email");
@@ -39,6 +47,7 @@ public class NewsletterSignupTest extends BaseTest {
     }
 
     @Test
+    @Severity(SeverityLevel.CRITICAL)
     @DisplayName("P2 - Verify the correct email is displayed in confirmation modal ")
     void testConfirmationEmailMatchesInput(){
         logger.info("TEST: Confirmation email text matches input");
@@ -51,6 +60,7 @@ public class NewsletterSignupTest extends BaseTest {
     }
 
     @Test
+    @Severity(SeverityLevel.NORMAL)
     @DisplayName("P3 - Verify you dismiss modal and then the form resets")
     void testDismissModalResetsForm(){
         logger.info("TEST: Dismiss modal resets form");
@@ -75,6 +85,7 @@ public class NewsletterSignupTest extends BaseTest {
     }
 
     @Test
+    @Severity(SeverityLevel.MINOR)
     @DisplayName("P4 -  Verify correct page title is displayed")
     void testPageTitle() {
         logger.info("TEST: Page title verification");
@@ -85,6 +96,7 @@ public class NewsletterSignupTest extends BaseTest {
     }
 
     @Test
+    @Severity(SeverityLevel.NORMAL)
     @DisplayName("P5 - Verify form accepts text input in email field")
     void testEmailFieldAcceptsInput() {
         logger.info("TEST: Email field accepts text input");
@@ -100,10 +112,11 @@ public class NewsletterSignupTest extends BaseTest {
     }
 
 //    NEGATIVE TESTS
-@Test
-@DisplayName("N1 - Verify error is shown when email is empty")
-void testEmptyEmailShowsError() {
-    logger.info("TEST: Empty email validation");
+    @Test
+    @Severity(SeverityLevel.CRITICAL)
+    @DisplayName("N1 - Verify error is shown when email is empty")
+    void testEmptyEmailShowsError() {
+        logger.info("TEST: Empty email validation");
 
     // Click subscribe without entering anything
     signupPage.submitEmail("");
@@ -117,6 +130,7 @@ void testEmptyEmailShowsError() {
 }
 
     @Test
+    @Severity(SeverityLevel.CRITICAL)
     @DisplayName("N2 - Verify error is shown for email missing @ symbol")
     void testEmailMissingAtSymbol() {
         logger.info("TEST: Email missing @ symbol");
@@ -132,6 +146,7 @@ void testEmptyEmailShowsError() {
     }
 
     @Test
+    @Severity(SeverityLevel.NORMAL)
     @DisplayName("N3 - Verify error is shown for email missing domain")
     void testEmailMissingDomain() {
         logger.info("TEST: Email missing domain");
@@ -147,6 +162,7 @@ void testEmptyEmailShowsError() {
     }
 
     @Test
+    @Severity(SeverityLevel.NORMAL)
     @DisplayName("N4 - Verify error is shown for email missing TLD")
     void testEmailMissingTLD() {
         logger.info("TEST: Email missing top-level domain");
@@ -162,6 +178,7 @@ void testEmptyEmailShowsError() {
     }
 
     @Test
+    @Severity(SeverityLevel.NORMAL)
     @DisplayName("N5 - Verify error is cleared when user starts typing")
     void testErrorClearsOnInput(){
         logger.info("TEST: Error clears when user types");

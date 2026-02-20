@@ -1,5 +1,6 @@
 package com.hasby.newsletter.pages;
 
+import io.qameta.allure.Step;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.openqa.selenium.WebDriver;
@@ -33,42 +34,52 @@ public class SignupPage {
 
     //Actions (what a user can DO on this page)
 
+    @Step("Enter email: {email}")
     public void enterEmail(String email) {
         emailInput.sendKeys(email);
         logger.info("Entered email: {}", email);
     }
+    @Step("Click subscribe button")
     public void clickSubscribe() {
         submitButton.click();
         logger.info("Clicked subscribe button");
     }
+    @Step("Submit email: {email}")
     public void submitEmail(String email) {
         if (email != null && !email.isEmpty()) {
             enterEmail(email);
         }
         clickSubscribe();
     }
+    @Step("Get email field value")
     public String getEmailFieldValue() {
         return emailInput.getAttribute("value");
     }
+    @Step("Check if email field is enabled")
     public boolean isEmailFieldEnabled() {
         return emailInput.isEnabled();
     }
+    @Step("Check for error state")
     public boolean hasError() {
         String classes = emailGroup.getAttribute("class");
         return classes != null && classes.contains("error");
     }
+    @Step("Wait for error to appear")
     public void waitForError() {
         wait.until(d -> hasError());
         logger.info("Error state detected");
     }
+    @Step("Wait for error to clear")
     public void waitForErrorToClear() {
         wait.until(d -> !hasError());
         logger.info("Error state cleared");
     }
+    @Step("Type '{text}' in email field")
     public void typeInEmailField(String text) {
         emailInput.sendKeys(text);
         logger.info("Typed '{}' in email field", text);
     }
+    @Step("Get page title")
     public String getPageTitle() {
         return driver.getTitle();
     }

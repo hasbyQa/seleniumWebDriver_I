@@ -1,5 +1,6 @@
 package com.hasby.newsletter.pages;
 
+import io.qameta.allure.Step;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
@@ -34,20 +35,25 @@ public class SuccessModalPage {
     }
 
     //Actions
+    @Step("Wait for success modal to appear")
     public void waitForModalVisible() {
         wait.until(ExpectedConditions.visibilityOf(modal));
         logger.info("Success modal is visible");
     }
+    @Step("Wait for success modal to disappear")
     public void waitForModalHidden() {
         wait.until(ExpectedConditions.invisibilityOf(modal));
         logger.info("Success modal is hidden");
     }
+    @Step("Check if modal is displayed")
     public boolean isDisplayed() {
         return modal.isDisplayed();
     }
+    @Step("Check if modal is displayed")
     public String getConfirmationEmail() {
         return confirmEmail.getText();
     }
+    @Step("Click dismiss button")
     public void clickDismiss() {
         dismissButton.click();
         logger.info("Clicked dismiss button");
