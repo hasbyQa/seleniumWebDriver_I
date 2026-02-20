@@ -1,6 +1,7 @@
 package com.hasby.newsletter.base;
 
 import com.hasby.newsletter.utils.DriverFactory;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,7 @@ public class BaseTest {
     }
 
 //    Closes the browser and releases resources
+    @AfterEach
     void tearDown(){
         logger.info("**************** TEST TEARDOWN STARTED ****************");
         if(driver != null){

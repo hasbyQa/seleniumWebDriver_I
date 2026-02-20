@@ -1,46 +1,26 @@
 package com.hasby.newsletter.tests;
 
 import com.hasby.newsletter.base.BaseTest;
+import com.hasby.newsletter.pages.SignupPage;
+import com.hasby.newsletter.pages.SuccessModalPage;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.openqa.selenium.By;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
-import org.openqa.selenium.support.ui.ExpectedCondition;
-import org.openqa.selenium.support.ui.ExpectedConditions;
-import org.openqa.selenium.support.ui.WebDriverWait;
-
-import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class NewsletterSignupTest extends BaseTest {
-//    locators
-    private static final By EMAIL_INPUT = By.id("email");
-    private static final By SUBMIT_BTN = By.id("submit-btn");
-    private static final By EMAIL_GROUP = By.id("email-group");
-    private static final By MODAL = By.id("modal");
-    private static final By CONFIRM_EMAIL = By.id("confirm-email");
-    private static final By DISMISS_BTN = By.id("dismiss-btn");
-
-//    Test data
+    //    Test data
     private static final String VALID_EMAIL = "test@example.com";
 
-    private WebDriverWait getWait(){
-        return new WebDriverWait(driver, Duration.ofSeconds(10)); //polls DOM until condition met or 10s timeout
-    }
+    private SignupPage signupPage;
+    private SuccessModalPage modalPage;
 
-    private boolean hasErrorClass(){
-        String classes = driver.findElement(EMAIL_GROUP).getAttribute("class");
-        return classes != null && classes.contains("error");
-    }
-
-    //submits the forms with a given email
-    private void submitEmail(String email){
-        if(email != null && !email.isEmpty()){
-            driver.findElement(EMAIL_INPUT).sendKeys(email);
-        }
-        driver.findElement(SUBMIT_BTN).click();
+    // Initialize page objects before each test
+    @BeforeEach
+    void initPages() {
+        signupPage = new SignupPage(driver);
+        modalPage = new SuccessModalPage(driver);
     }
 
     // POSITIVE TESTS (Happy Path)
@@ -49,14 +29,12 @@ public class NewsletterSignupTest extends BaseTest {
     void testSuccessfulSubscription(){
         logger.info("TEST: Successful subscription with valid email");
 
-        submitEmail(VALID_EMAIL);
+        signupPage.submitEmail(VALID_EMAIL);
         logger.info("Submitted email:{}", VALID_EMAIL);
 
         // Wait for success modal to become visible
-        WebElement modal = getWait().until(
-                ExpectedConditions.visibilityOfElementLocated(MODAL)
-        );
-        assertTrue(modal.isDisplayed(), "Success modal should be visible");
+        modalPage.waitForModalVisible();
+        assertTrue(modalPage.isDisplayed(), "Success modal should be visible");
         logger.info("Success modal appeared - subscription successful");
     }
 
@@ -64,10 +42,10 @@ public class NewsletterSignupTest extends BaseTest {
     @DisplayName("P2 - Verify the correct email is displayed in confirmation modal ")
     void testConfirmationEmailMatchesInput(){
         logger.info("TEST: Confirmation email text matches input");
-        submitEmail(VALID_EMAIL);
-        getWait().until(ExpectedConditions.visibilityOfElementLocated(MODAL));
+        signupPage.submitEmail(VALID_EMAIL);
+        modalPage.waitForModalVisible();
 
-        String displayedEmail = driver.findElement(CONFIRM_EMAIL).getText();
+        String displayedEmail = modalPage.getConfirmationEmail();
         assertEquals(VALID_EMAIL, displayedEmail, "Confirmation email should match the entered email");
         logger.info("Confirmed email text: {}", displayedEmail);
     }
@@ -78,20 +56,20 @@ public class NewsletterSignupTest extends BaseTest {
         logger.info("TEST: Dismiss modal resets form");
 
         // Subscribe first
-        submitEmail(VALID_EMAIL);
-        getWait().until(ExpectedConditions.visibilityOfElementLocated(MODAL));
+        signupPage.submitEmail(VALID_EMAIL);
+        modalPage.waitForModalVisible();
         logger.info("Modal appeared");
 
         // Dismiss
-        driver.findElement(DISMISS_BTN).click();
-        getWait().until(ExpectedConditions.invisibilityOfElementLocated(MODAL));
+        modalPage.clickDismiss();
+        modalPage.waitForModalHidden();
         logger.info("Modal dismissed");
 
         // Modal should be hidden
-        assertFalse(driver.findElement(MODAL).isDisplayed(), "Modal should be hidden after dismiss");
+        assertFalse(modalPage.isDisplayed(), "Modal should be hidden after dismiss");
 
         // Email field should be cleared
-        String emailValue = driver.findElement(EMAIL_INPUT).getAttribute("value");
+        String emailValue = signupPage.getEmailFieldValue();
         assertEquals("", emailValue, "Email field should be empty after dismiss");
         logger.info("Form reset confirmed email field is empty");
     }
@@ -101,7 +79,7 @@ public class NewsletterSignupTest extends BaseTest {
     void testPageTitle() {
         logger.info("TEST: Page title verification");
 
-        String title = driver.getTitle();
+        String title = signupPage.getPageTitle();
         assertEquals("Newsletter Signup", title, "Page title should be 'Newsletter Signup'");
         logger.info("Page title verified: {}", title);
     }
@@ -111,34 +89,32 @@ public class NewsletterSignupTest extends BaseTest {
     void testEmailFieldAcceptsInput() {
         logger.info("TEST: Email field accepts text input");
 
-        WebElement emailField = driver.findElement(EMAIL_INPUT);
-
         // Verify the field is enabled and interactable
-        assertTrue(emailField.isEnabled(), "Email field should be enabled");
+        assertTrue(signupPage.isEmailFieldEnabled(), "Email field should be enabled");
 
         // Type and verify the value is captured
-        emailField.sendKeys(VALID_EMAIL);
-        String enteredValue = emailField.getAttribute("value");
+        signupPage.enterEmail(VALID_EMAIL);
+        String enteredValue = signupPage.getEmailFieldValue();
         assertEquals(VALID_EMAIL, enteredValue, "Email field should contain the typed text");
         logger.info("Email field accepted input: {}", enteredValue);
     }
 
 //    NEGATIVE TESTS
-    @Test
-    @DisplayName("N1 - Verify error is shown when email is empty")
-    void testEmptyEmailShowsError() {
-        logger.info("TEST: Empty email validation");
+@Test
+@DisplayName("N1 - Verify error is shown when email is empty")
+void testEmptyEmailShowsError() {
+    logger.info("TEST: Empty email validation");
 
-        // Click subscribe without entering anything
-        submitEmail("");
-        logger.info("Submitted with empty email");
+    // Click subscribe without entering anything
+    signupPage.submitEmail("");
+    logger.info("Submitted with empty email");
 
-        // Wait for error class to appear
-        getWait().until(d -> hasErrorClass());
+    // Wait for error class to appear
+    signupPage.waitForError();
 
-        assertTrue(hasErrorClass(), "Error should be shown for empty email");
-        logger.info("Error state verified for empty email");
-    }
+    assertTrue(signupPage.hasError(), "Error should be shown for empty email");
+    logger.info("Error state verified for empty email");
+}
 
     @Test
     @DisplayName("N2 - Verify error is shown for email missing @ symbol")
@@ -146,12 +122,12 @@ public class NewsletterSignupTest extends BaseTest {
         logger.info("TEST: Email missing @ symbol");
 
         String invalidEmail = "testexample.com";
-        submitEmail(invalidEmail);
+        signupPage.submitEmail(invalidEmail);
         logger.info("Submitted invalid email: {}", invalidEmail);
 
-        getWait().until(d -> hasErrorClass());
+        signupPage.waitForError();
 
-        assertTrue(hasErrorClass(), "Error should be shown for email without @");
+        assertTrue(signupPage.hasError(), "Error should be shown for email without @");
         logger.info("Error state verified for missing @ symbol");
     }
 
@@ -161,12 +137,12 @@ public class NewsletterSignupTest extends BaseTest {
         logger.info("TEST: Email missing domain");
 
         String invalidEmail = "test@";
-        submitEmail(invalidEmail);
+        signupPage.submitEmail(invalidEmail);
         logger.info("Submitted invalid email: {}", invalidEmail);
 
-        getWait().until(d -> hasErrorClass());
+        signupPage.waitForError();
 
-        assertTrue(hasErrorClass(), "Error should be shown for email without domain");
+        assertTrue(signupPage.hasError(), "Error should be shown for email without domain");
         logger.info("Error state verified for missing domain");
     }
 
@@ -176,12 +152,12 @@ public class NewsletterSignupTest extends BaseTest {
         logger.info("TEST: Email missing top-level domain");
 
         String invalidEmail = "test@company";
-        submitEmail(invalidEmail);
+        signupPage.submitEmail(invalidEmail);
         logger.info("Submitted invalid email: {}", invalidEmail);
 
-        getWait().until(d -> hasErrorClass());
+        signupPage.waitForError();
 
-        assertTrue(hasErrorClass(), "Error should be shown for email without TLD (.com, .org, etc...)");
+        assertTrue(signupPage.hasError(), "Error should be shown for email without TLD (.com, .org, etc...)");
         logger.info("Error state verified for missing TLD");
     }
 
@@ -191,13 +167,15 @@ public class NewsletterSignupTest extends BaseTest {
         logger.info("TEST: Error clears when user types");
 
         //Triggering the error first
-        submitEmail("");
-        getWait().until(d -> hasErrorClass());
-        assertTrue(hasErrorClass(), "Error should appear first");
+        signupPage.submitEmail("");
+        signupPage.waitForError();
+        assertTrue(signupPage.hasError(), "Error should appear first");
         logger.info("Error triggered");
-        driver.findElement(EMAIL_INPUT).sendKeys("t");
-        getWait().until(d -> !hasErrorClass());
 
-        assertFalse(hasErrorClass(), "Error should clear when user starts typing"); logger.info("Error cleared after user input");
+        signupPage.typeInEmailField("t");
+        signupPage.waitForErrorToClear();
+
+        assertFalse(signupPage.hasError(), "Error should clear when user starts typing");
+        logger.info("Error cleared after user input");
     }
 }
