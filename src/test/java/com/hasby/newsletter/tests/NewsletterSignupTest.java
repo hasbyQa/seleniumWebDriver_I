@@ -122,4 +122,82 @@ public class NewsletterSignupTest extends BaseTest {
         assertEquals(VALID_EMAIL, enteredValue, "Email field should contain the typed text");
         logger.info("Email field accepted input: {}", enteredValue);
     }
+
+//    NEGATIVE TESTS
+    @Test
+    @DisplayName("N1 - Verify error is shown when email is empty")
+    void testEmptyEmailShowsError() {
+        logger.info("TEST: Empty email validation");
+
+        // Click subscribe without entering anything
+        submitEmail("");
+        logger.info("Submitted with empty email");
+
+        // Wait for error class to appear
+        getWait().until(d -> hasErrorClass());
+
+        assertTrue(hasErrorClass(), "Error should be shown for empty email");
+        logger.info("Error state verified for empty email");
+    }
+
+    @Test
+    @DisplayName("N2 - Verify error is shown for email missing @ symbol")
+    void testEmailMissingAtSymbol() {
+        logger.info("TEST: Email missing @ symbol");
+
+        String invalidEmail = "testexample.com";
+        submitEmail(invalidEmail);
+        logger.info("Submitted invalid email: {}", invalidEmail);
+
+        getWait().until(d -> hasErrorClass());
+
+        assertTrue(hasErrorClass(), "Error should be shown for email without @");
+        logger.info("Error state verified for missing @ symbol");
+    }
+
+    @Test
+    @DisplayName("N3 - Verify error is shown for email missing domain")
+    void testEmailMissingDomain() {
+        logger.info("TEST: Email missing domain");
+
+        String invalidEmail = "test@";
+        submitEmail(invalidEmail);
+        logger.info("Submitted invalid email: {}", invalidEmail);
+
+        getWait().until(d -> hasErrorClass());
+
+        assertTrue(hasErrorClass(), "Error should be shown for email without domain");
+        logger.info("Error state verified for missing domain");
+    }
+
+    @Test
+    @DisplayName("N4 - Verify error is shown for email missing TLD")
+    void testEmailMissingTLD() {
+        logger.info("TEST: Email missing top-level domain");
+
+        String invalidEmail = "test@company";
+        submitEmail(invalidEmail);
+        logger.info("Submitted invalid email: {}", invalidEmail);
+
+        getWait().until(d -> hasErrorClass());
+
+        assertTrue(hasErrorClass(), "Error should be shown for email without TLD (.com, .org, etc...)");
+        logger.info("Error state verified for missing TLD");
+    }
+
+    @Test
+    @DisplayName("N5 - Verify error is cleared when user starts typing")
+    void testErrorClearsOnInput(){
+        logger.info("TEST: Error clears when user types");
+
+        //Triggering the error first
+        submitEmail("");
+        getWait().until(d -> hasErrorClass());
+        assertTrue(hasErrorClass(), "Error should appear first");
+        logger.info("Error triggered");
+        driver.findElement(EMAIL_INPUT).sendKeys("t");
+        getWait().until(d -> !hasErrorClass());
+
+        assertFalse(hasErrorClass(), "Error should clear when user starts typing"); logger.info("Error cleared after user input");
+    }
 }
