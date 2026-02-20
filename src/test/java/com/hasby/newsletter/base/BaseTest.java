@@ -1,11 +1,13 @@
 package com.hasby.newsletter.base;
 
 import com.hasby.newsletter.utils.DriverFactory;
+import com.hasby.newsletter.utils.ScreenshotUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.openqa.selenium.WebDriver;
+import org.junit.jupiter.api.TestInfo;
 
 public class BaseTest {
 
@@ -13,6 +15,9 @@ public class BaseTest {
     protected WebDriver driver;
     protected static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
     protected static final String BASE_URL = "https://hasby-shanessa.github.io/news_letter_webDev/";
+
+    // Tracks if current test failed (for screenshot capture)
+    private boolean testFailed = false;
 
 //    Creates a fresh browser instance and navigates to the base URL
     @BeforeEach
@@ -26,12 +31,21 @@ public class BaseTest {
 
 //    Closes the browser and releases resources
     @AfterEach
-    void tearDown(){
+    void tearDown(TestInfo testInfo){
         logger.info("**************** TEST TEARDOWN STARTED ****************");
         if(driver != null){
+            // Capture screenshot on failure for Allure report
+            if (testFailed) {
+                String testName = testInfo.getDisplayName();
+                logger.info("Test FAILED — capturing screenshot: {}", testName);
+                ScreenshotUtil.takeScreenshot(driver, "FAILED_" + testName);
+            }
             driver.quit();
             logger.info("Browser closed successfully");
         }
         logger.info("**************** TEST TEARDOWN STARTED ****************");
+    }
+    protected void markTestFailed() {
+        this.testFailed = true;
     }
 }
