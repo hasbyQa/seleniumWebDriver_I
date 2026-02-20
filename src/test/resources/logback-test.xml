@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding="UTF-8"?>
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss} %-5level [%logger{20}] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Suppress noisy Selenium internal logs -->
+    <logger name="org.openqa.selenium" level="WARN"/>
+    <logger name="io.github.bonigarcia" level="WARN"/>
+
+    <!-- Root logger: everything at INFO level goes to console -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
