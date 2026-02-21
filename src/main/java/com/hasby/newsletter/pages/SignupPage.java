@@ -1,6 +1,7 @@
 package com.hasby.newsletter.pages;
 
 import io.qameta.allure.Step;
+import org.openqa.selenium.By;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.openqa.selenium.WebDriver;
@@ -82,5 +83,16 @@ public class SignupPage {
     @Step("Get page title")
     public String getPageTitle() {
         return driver.getTitle();
+    }
+    @Step("Get error message aria-live attribute")
+    public String getErrorMessageAriaLive() {
+        WebElement errorMsg = driver.findElement(By.cssSelector(".error-message"));
+        return errorMsg.getAttribute("aria-live");
+    }
+
+    @Step("Get error message role attribute")
+    public String getErrorMessageRole() {
+        WebElement errorMsg = driver.findElement(By.cssSelector(".error-message"));
+        return errorMsg.getAttribute("role");
     }
 }

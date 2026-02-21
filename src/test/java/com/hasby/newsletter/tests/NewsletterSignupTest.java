@@ -163,4 +163,47 @@ public class NewsletterSignupTest extends BaseTest {
         assertFalse(signupPage.hasError(), "Error should clear when user starts typing");
         logger.info("Error cleared after user input");
     }
+
+    //Failing Tests
+    @Test
+    @Story("Input Validation")
+    @Severity(SeverityLevel.MINOR)
+    @Description("BUG REPORT: Email field has no maximum character limit, allowing excessively long input")
+    @DisplayName("F1 - BUG: Email field should enforce maximum character limit")
+    void testEmailFieldHasMaxLength() {
+        logger.info("TEST: Email field maximum character limit");
+
+        // Generate a very long email string (over 100 characters)
+        String longEmail = "a".repeat(300) + "@example.com";
+        signupPage.enterEmail(longEmail);
+        String enteredValue = signupPage.getEmailFieldValue();
+        assertTrue(enteredValue.length() <= 254,
+                "BUG-001 | Email field accepts " + enteredValue.length() + " characters. " + "Expected: maxlength of 254 (RFC 5321 standard). " +
+                        "Actual: No maxlength attribute set on input#email. " + "Steps: Navigate to signup → enter 312 chars in email field → field accepts all with no limit. "
+                        + "Severity: Minor | Priority: Low | Status: Open | " + "Fix: Add maxlength=\"254\" to <input id=\"email\">");
+        logger.info("Email field character limit verified");
+    }
+
+    @Test
+    @Story("Accessibility")
+    @Severity(SeverityLevel.NORMAL)
+    @Description("BUG REPORT: Error state lacks ARIA attributes for screen reader accessibility")
+    @DisplayName("F2 - BUG: Error message should have aria-live attribute for accessibility")
+    void testErrorMessageHasAriaAttributes() {
+        logger.info("TEST: Error message ARIA accessibility");
+
+        // Trigger the error state
+        signupPage.submitEmail("");
+        signupPage.waitForError();
+        logger.info("Error state triggered");
+        // Check for aria-live or role="alert" on the error message
+        String ariaLive = signupPage.getErrorMessageAriaLive();
+        String role = signupPage.getErrorMessageRole();
+
+        assertTrue(ariaLive != null || "alert".equals(role),
+                "BUG-002 | Error message lacks accessibility attributes. " + "Expected: aria-live=\"polite\" or role=\"alert\" on .error-message element. " + "Actual: aria-live="
+                        + ariaLive + ", role=" + role + ". " + "Steps: Navigate to signup → leave email empty → click Subscribe → " + "inspect .error-message span for ARIA attributes → none found. "
+                        + "Severity: Normal (WCAG 2.1 violation) | Priority: Medium | Status: Open | " + "Fix: Add role=\"alert\" aria-live=\"polite\" to <span class=\"error-message\">");
+        logger.info("ARIA attributes verified on error message");
+    }
 }
