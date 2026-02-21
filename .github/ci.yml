@@ -1,0 +1,183 @@
+# CI pipeline that runs Selenium tests on every push/PR to main
+# Tests run in headless Chrome on Ubuntu, results go to Slack + Email
+
+name: Selenium CI Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Run Selenium Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # Get the code from the repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install Java 17 (matches our local Maven setup)
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: maven
+
+      # Make sure Chrome is available for Selenium
+      - name: Set up Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      # Print versions so we can debug if something breaks
+      - name: Verify environment
+        run: |
+          java -version
+          mvn -version
+          google-chrome --version
+
+      # Run all tests — continue even if some fail so we can still report results
+      - name: Run Selenium tests
+        id: run_tests
+        continue-on-error: true
+        run: mvn clean test
+
+      # Parse the XML report to get pass/fail numbers for notifications
+      - name: Capture test results
+        if: always()
+        id: test_results
+        run: |
+          if [ -f target/surefire-reports/TEST-com.hasby.newsletter.tests.NewsletterSignupTest.xml ]; then
+            TESTS=$(grep -oP 'tests="\K[^"]+' target/surefire-reports/TEST-com.hasby.newsletter.tests.NewsletterSignupTest.xml | head -1)
+            FAILURES=$(grep -oP 'failures="\K[^"]+' target/surefire-reports/TEST-com.hasby.newsletter.tests.NewsletterSignupTest.xml | head -1)
+            ERRORS=$(grep -oP 'errors="\K[^"]+' target/surefire-reports/TEST-com.hasby.newsletter.tests.NewsletterSignupTest.xml | head -1)
+            SKIPPED=$(grep -oP 'skipped="\K[^"]+' target/surefire-reports/TEST-com.hasby.newsletter.tests.NewsletterSignupTest.xml | head -1)
+            PASSED=$((TESTS - FAILURES - ERRORS - SKIPPED))
+          else
+            TESTS="?"
+            FAILURES="?"
+            ERRORS="?"
+            SKIPPED="?"
+            PASSED="?"
+          fi
+
+          echo "total=$TESTS" >> $GITHUB_OUTPUT
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+          echo "failures=$FAILURES" >> $GITHUB_OUTPUT
+          echo "errors=$ERRORS" >> $GITHUB_OUTPUT
+          echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
+
+          if [ "${{ steps.run_tests.outcome }}" == "success" ]; then
+            echo "status=PASSED ✅" >> $GITHUB_OUTPUT
+          else
+            echo "status=FAILED ❌" >> $GITHUB_OUTPUT
+          fi
+
+      # Save Allure results so they can be downloaded from GitHub Actions
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: target/allure-results/
+          retention-days: 30
+
+      # Save Maven's test reports (useful for detailed debugging)
+      - name: Upload Surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 30
+
+      # Send test results to Slack channel
+      - name: Notify Slack
+        if: always()
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ steps.test_results.outputs.status == 'PASSED ✅' && '✅ Tests Passed' || '❌ Tests Failed' }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*Repository:*\n${{ github.repository }}" },
+                    { "type": "mrkdwn", "text": "*Branch:*\n${{ github.ref_name }}" },
+                    { "type": "mrkdwn", "text": "*Triggered by:*\n${{ github.actor }}" },
+                    { "type": "mrkdwn", "text": "*Commit:*\n${{ github.event.head_commit.message || 'PR event' }}" }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*Total:* ${{ steps.test_results.outputs.total }}" },
+                    { "type": "mrkdwn", "text": "*Passed:* ${{ steps.test_results.outputs.passed }}" },
+                    { "type": "mrkdwn", "text": "*Failed:* ${{ steps.test_results.outputs.failures }}" },
+                    { "type": "mrkdwn", "text": "*Errors:* ${{ steps.test_results.outputs.errors }}" }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": { "type": "plain_text", "text": "View Run Details" },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+
+      # Send email notification with test summary
+      - name: Notify via Email
+        if: always()
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.NOTIFICATION_EMAIL }}
+          password: ${{ secrets.EMAIL_APP_PASSWORD }}
+          subject: "CI Report: ${{ steps.test_results.outputs.status }} - ${{ github.repository }}"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: "CI Bot <${{ secrets.NOTIFICATION_EMAIL }}>"
+          body: |
+            SELENIUM TEST REPORT
+            ====================
+            Status:      ${{ steps.test_results.outputs.status }}
+            Repository:  ${{ github.repository }}
+            Branch:      ${{ github.ref_name }}
+            Commit:      ${{ github.event.head_commit.message || 'PR event' }}
+            Triggered:   ${{ github.actor }}
+
+            TEST RESULTS
+            ------------
+            Total:    ${{ steps.test_results.outputs.total }}
+            Passed:   ${{ steps.test_results.outputs.passed }}
+            Failed:   ${{ steps.test_results.outputs.failures }}
+            Errors:   ${{ steps.test_results.outputs.errors }}
+            Skipped:  ${{ steps.test_results.outputs.skipped }}
+
+            View details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      # Mark the pipeline as failed if any tests failed (shows red X on GitHub)
+      - name: Check test outcome
+        if: steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::error::Some tests failed. Check Allure report for details."
+          exit 1
