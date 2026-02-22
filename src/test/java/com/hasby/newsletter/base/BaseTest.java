@@ -3,14 +3,17 @@ package com.hasby.newsletter.base;
 import com.hasby.newsletter.pages.SignupPage;
 import com.hasby.newsletter.pages.SuccessModalPage;
 import com.hasby.newsletter.utils.DriverFactory;
+import com.hasby.newsletter.utils.ScreenshotExtension;
 import com.hasby.newsletter.utils.ScreenshotUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.openqa.selenium.WebDriver;
 import org.junit.jupiter.api.TestInfo;
 
+@ExtendWith(ScreenshotExtension.class)
 public class BaseTest {
 
 //    Protected so subclasses can access the driver directly
@@ -39,21 +42,11 @@ public class BaseTest {
 
 //    Closes the browser and releases resources
     @AfterEach
-    void tearDown(TestInfo testInfo){
-        logger.info("**************** TEST TEARDOWN STARTED ****************");
-        if(driver != null){
-            // Capture screenshot on failure for Allure report
-            if (testFailed) {
-                String testName = testInfo.getDisplayName();
-                logger.info("Test FAILED — capturing screenshot: {}", testName);
-                ScreenshotUtil.takeScreenshot(driver, "FAILED_" + testName);
-            }
-            driver.quit();
-            logger.info("Browser closed successfully");
-        }
-        logger.info("**************** TEST TEARDOWN STARTED ****************");
+    void tearDown() {
+        logger.info("*************** TEST TEARDOWN ***************");
     }
-    protected void markTestFailed() {
-        this.testFailed = true;
+    // Used by ScreenshotExtension to access the driver
+    public WebDriver getDriver() {
+        return driver;
     }
 }
