@@ -315,7 +315,7 @@ jobs:
             </body>
             </html>
 
-      # Mark pipeline as failed if tests failed (shows red X on GitHub)
+      # Mark pipeline as failed if tests failed
       - name: Check test outcome
         if: steps.run_tests.outcome == 'failure'
         run: |
