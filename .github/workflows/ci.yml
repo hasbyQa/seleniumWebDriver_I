@@ -1,5 +1,5 @@
 # CI pipeline that runs Selenium tests on every push/PR to main
-# Tests run in headless Chrome, results go to Slack + Email with failure details
+# Tests run in headless Chrome, results go to Slack + Email with failure + skipped details
 
 name: Selenium CI Tests
 
@@ -19,7 +19,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Install Java 17 (matches local Maven setup)
+      # Install Java 17 (matches our local Maven setup)
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -46,7 +46,7 @@ jobs:
         continue-on-error: true
         run: mvn clean test
 
-      # Parse XML report for pass/fail counts and extract failure details
+      # Parse XML report for pass/fail/skipped counts and extract details
       - name: Capture test results
         if: always()
         id: test_results
@@ -60,35 +60,49 @@ jobs:
             SKIPPED=$(grep -oP 'skipped="\K[^"]+' "$REPORT_FILE" | head -1)
             PASSED=$((TESTS - FAILURES - ERRORS - SKIPPED))
 
-            # Extract failed test details from surefire report
-            FAILURE_DETAILS=""
-            if [ "$FAILURES" -gt 0 ] || [ "$ERRORS" -gt 0 ]; then
-              # Get failed test names and their error messages
-              FAILURE_DETAILS=$(python3 << 'EOF'
+            # Extract failed AND skipped test details
+            python3 << 'PYEOF'
           import xml.etree.ElementTree as ET
+
           tree = ET.parse("target/surefire-reports/TEST-com.hasby.newsletter.tests.NewsletterSignupTest.xml")
           root = tree.getroot()
+
           failures = []
+          skipped_tests = []
+
           for tc in root.findall('.//testcase'):
+              name = tc.get('name', 'Unknown')
+
+              # Check for failures
               failure = tc.find('failure')
               if failure is not None:
-                  name = tc.get('name', 'Unknown')
                   msg = failure.get('message', 'No message')
-                  # Truncate long messages for notification
                   if len(msg) > 300:
                       msg = msg[:300] + '...'
                   failures.append(f"• {name}\n  {msg}")
-          print('\n\n'.join(failures))
-          EOF
-              )
-            fi
+
+              # Check for skipped/disabled
+              skipped = tc.find('skipped')
+              if skipped is not None:
+                  msg = skipped.get('message', 'No reason provided')
+                  if len(msg) > 300:
+                      msg = msg[:300] + '...'
+                  skipped_tests.append(f"• {name}\n  Reason: {msg}")
+
+          with open('/tmp/failure_details.txt', 'w') as f:
+              f.write('\n\n'.join(failures) if failures else 'No failures')
+
+          with open('/tmp/skipped_details.txt', 'w') as f:
+              f.write('\n\n'.join(skipped_tests) if skipped_tests else 'No skipped tests')
+          PYEOF
           else
             TESTS="?"
             FAILURES="?"
             ERRORS="?"
             SKIPPED="?"
             PASSED="?"
-            FAILURE_DETAILS="Could not parse test report"
+            echo "Could not parse test report" > /tmp/failure_details.txt
+            echo "Could not parse test report" > /tmp/skipped_details.txt
           fi
 
           echo "total=$TESTS" >> $GITHUB_OUTPUT
@@ -96,9 +110,6 @@ jobs:
           echo "failures=$FAILURES" >> $GITHUB_OUTPUT
           echo "errors=$ERRORS" >> $GITHUB_OUTPUT
           echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
-
-          # Save failure details to a file (multiline output)
-          echo "$FAILURE_DETAILS" > /tmp/failure_details.txt
 
           if [ "${{ steps.run_tests.outcome }}" == "success" ]; then
             echo "status=PASSED ✅" >> $GITHUB_OUTPUT
@@ -124,51 +135,71 @@ jobs:
           path: target/surefire-reports/
           retention-days: 30
 
-      # Send Slack notification — includes failed test details when tests fail
+      # Send Slack notification on SUCCESS — includes skipped test details if any
       - name: Notify Slack (Success)
         if: always() && steps.run_tests.outcome == 'success'
-        uses: slackapi/slack-github-action@v2.0.0
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          webhook-type: incoming-webhook
-          payload: |
-            {
-              "blocks": [
+        shell: bash
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          COMMIT_MSG: ${{ github.event.head_commit.message || 'PR event' }}
+          TOTAL: ${{ steps.test_results.outputs.total }}
+          PASSED: ${{ steps.test_results.outputs.passed }}
+          FAILURES: ${{ steps.test_results.outputs.failures }}
+          SKIPPED: ${{ steps.test_results.outputs.skipped }}
+        run: |
+          SKIP_DETAILS=$(cat /tmp/skipped_details.txt | head -40)
+          SKIP_ESCAPED=$(echo "$SKIP_DETAILS" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))" | sed 's/^"//;s/"$//')
+          
+          SKIP_BLOCK=""
+          if [ "$SKIPPED" -gt 0 ] 2>/dev/null; then
+            SKIP_BLOCK=',{"type":"divider"},{"type":"section","text":{"type":"mrkdwn","text":"*⏭️ Skipped/Disabled Tests:*\n\`\`\`'"${SKIP_ESCAPED}"'\`\`\`"}}'
+          fi
+
+          curl -X POST "$SLACK_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"blocks\": [
                 {
-                  "type": "header",
-                  "text": { "type": "plain_text", "text": "✅ All Tests Passed" }
+                  \"type\": \"header\",
+                  \"text\": { \"type\": \"plain_text\", \"text\": \"✅ All Tests Passed\" }
                 },
                 {
-                  "type": "section",
-                  "fields": [
-                    { "type": "mrkdwn", "text": "*Repository:*\n${{ github.repository }}" },
-                    { "type": "mrkdwn", "text": "*Branch:*\n${{ github.ref_name }}" },
-                    { "type": "mrkdwn", "text": "*Triggered by:*\n${{ github.actor }}" },
-                    { "type": "mrkdwn", "text": "*Commit:*\n${{ github.event.head_commit.message || 'PR event' }}" }
+                  \"type\": \"section\",
+                  \"fields\": [
+                    { \"type\": \"mrkdwn\", \"text\": \"*Repository:*\n${REPO}\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*Branch:*\n${BRANCH}\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*Triggered by:*\n${ACTOR}\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*Commit:*\n${COMMIT_MSG}\" }
                   ]
                 },
                 {
-                  "type": "section",
-                  "fields": [
-                    { "type": "mrkdwn", "text": "*Total:* ${{ steps.test_results.outputs.total }}" },
-                    { "type": "mrkdwn", "text": "*Passed:* ${{ steps.test_results.outputs.passed }}" },
-                    { "type": "mrkdwn", "text": "*Failed:* ${{ steps.test_results.outputs.failures }}" },
-                    { "type": "mrkdwn", "text": "*Skipped:* ${{ steps.test_results.outputs.skipped }}" }
+                  \"type\": \"section\",
+                  \"fields\": [
+                    { \"type\": \"mrkdwn\", \"text\": \"*Total:* ${TOTAL}\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*Passed:* ${PASSED}\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*Failed:* ${FAILURES}\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*Skipped:* ${SKIPPED}\" }
                   ]
-                },
+                }
+                ${SKIP_BLOCK},
                 {
-                  "type": "actions",
-                  "elements": [
+                  \"type\": \"actions\",
+                  \"elements\": [
                     {
-                      "type": "button",
-                      "text": { "type": "plain_text", "text": "View Run Details" },
-                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                      \"type\": \"button\",
+                      \"text\": { \"type\": \"plain_text\", \"text\": \"View Run Details\" },
+                      \"url\": \"${RUN_URL}\"
                     }
                   ]
                 }
               ]
-            }
+            }"
 
+      # Send Slack notification on FAILURE — includes failed + skipped test details
       - name: Notify Slack (Failure with Bug Details)
         if: always() && steps.run_tests.outcome == 'failure'
         shell: bash
@@ -183,13 +214,19 @@ jobs:
           PASSED: ${{ steps.test_results.outputs.passed }}
           FAILURES: ${{ steps.test_results.outputs.failures }}
           ERRORS: ${{ steps.test_results.outputs.errors }}
+          SKIPPED: ${{ steps.test_results.outputs.skipped }}
         run: |
-          # Read failure details
           DETAILS=$(cat /tmp/failure_details.txt | head -40)
+          SKIP_DETAILS=$(cat /tmp/skipped_details.txt | head -40)
           
-          # Escape special characters for JSON
           DETAILS_ESCAPED=$(echo "$DETAILS" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))" | sed 's/^"//;s/"$//')
+          SKIP_ESCAPED=$(echo "$SKIP_DETAILS" | python3 -c "import sys,json; print(json.dumps(sys.stdin.read()))" | sed 's/^"//;s/"$//')
           
+          SKIP_BLOCK=""
+          if [ "$SKIPPED" -gt 0 ] 2>/dev/null; then
+            SKIP_BLOCK=',{"type":"section","text":{"type":"mrkdwn","text":"*⏭️ Skipped/Disabled Tests:*\n\`\`\`'"${SKIP_ESCAPED}"'\`\`\`"}}'
+          fi
+
           curl -X POST "$SLACK_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d "{
@@ -213,7 +250,7 @@ jobs:
                     { \"type\": \"mrkdwn\", \"text\": \"*Total:* ${TOTAL}\" },
                     { \"type\": \"mrkdwn\", \"text\": \"*Passed:* ${PASSED}\" },
                     { \"type\": \"mrkdwn\", \"text\": \"*Failed:* ${FAILURES}\" },
-                    { \"type\": \"mrkdwn\", \"text\": \"*Errors:* ${ERRORS}\" }
+                    { \"type\": \"mrkdwn\", \"text\": \"*Skipped:* ${SKIPPED}\" }
                   ]
                 },
                 {
@@ -225,7 +262,8 @@ jobs:
                     \"type\": \"mrkdwn\",
                     \"text\": \"*🐛 Failed Test Details:*\n\`\`\`${DETAILS_ESCAPED}\`\`\`\"
                   }
-                },
+                }
+                ${SKIP_BLOCK},
                 {
                   \"type\": \"section\",
                   \"text\": {
@@ -246,7 +284,7 @@ jobs:
               ]
             }"
 
-      # Send detailed email notification with bug report
+      # Send detailed email notification with bug report + skipped details
       - name: Notify via Email
         if: always()
         continue-on-error: true
@@ -284,7 +322,7 @@ jobs:
                   <th style="padding: 8px; border: 1px solid #ddd; color: green;">Passed</th>
                   <th style="padding: 8px; border: 1px solid #ddd; color: red;">Failed</th>
                   <th style="padding: 8px; border: 1px solid #ddd;">Errors</th>
-                  <th style="padding: 8px; border: 1px solid #ddd;">Skipped</th>
+                  <th style="padding: 8px; border: 1px solid #ddd; color: orange;">Skipped</th>
                 </tr>
                 <tr style="text-align: center;">
                   <td style="padding: 8px; border: 1px solid #ddd;">${{ steps.test_results.outputs.total }}</td>
@@ -296,7 +334,10 @@ jobs:
               </table>
 
               <h3>🐛 Failed Test Details</h3>
-              <pre style="background: #f8f8f8; padding: 16px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #ddd;">${{ steps.run_tests.outcome == 'failure' && '(See attached surefire report for full details)' || 'All tests passed!' }}</pre>
+              <pre style="background: #f8f8f8; padding: 16px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #ddd;">${{ steps.run_tests.outcome == 'failure' && '(See Allure report for full failure details)' || 'All tests passed!' }}</pre>
+
+              <h3>⏭️ Skipped/Disabled Tests</h3>
+              <pre style="background: #fff8e1; padding: 16px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #ffe082;">${{ steps.test_results.outputs.skipped != '0' && '(Skipped tests detected — see Allure report for disabled test reasons and bug details)' || 'No skipped tests' }}</pre>
 
               <p>📸 <strong>Screenshots</strong> are available in the Allure report artifact.</p>
 
@@ -315,7 +356,7 @@ jobs:
             </body>
             </html>
 
-      # Mark pipeline as failed if tests failed
+      # Mark pipeline as failed if tests failed (shows red X on GitHub)
       - name: Check test outcome
         if: steps.run_tests.outcome == 'failure'
         run: |

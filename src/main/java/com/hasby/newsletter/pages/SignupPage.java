@@ -40,11 +40,13 @@ public class SignupPage {
         emailInput.sendKeys(email);
         logger.info("Entered email: {}", email);
     }
+
     @Step("Click subscribe button")
     public void clickSubscribe() {
         submitButton.click();
         logger.info("Clicked subscribe button");
     }
+
     @Step("Submit email: {email}")
     public void submitEmail(String email) {
         if (email != null && !email.isEmpty()) {
@@ -52,38 +54,46 @@ public class SignupPage {
         }
         clickSubscribe();
     }
+
     @Step("Get email field value")
     public String getEmailFieldValue() {
         return emailInput.getAttribute("value");
     }
+
     @Step("Check if email field is enabled")
     public boolean isEmailFieldEnabled() {
         return emailInput.isEnabled();
     }
+
     @Step("Check for error state")
     public boolean hasError() {
         String classes = emailGroup.getAttribute("class");
         return classes != null && classes.contains("error");
     }
+
     @Step("Wait for error to appear")
     public void waitForError() {
         wait.until(d -> hasError());
         logger.info("Error state detected");
     }
+
     @Step("Wait for error to clear")
     public void waitForErrorToClear() {
         wait.until(d -> !hasError());
         logger.info("Error state cleared");
     }
+
     @Step("Type '{text}' in email field")
     public void typeInEmailField(String text) {
         emailInput.sendKeys(text);
         logger.info("Typed '{}' in email field", text);
     }
+
     @Step("Get page title")
     public String getPageTitle() {
         return driver.getTitle();
     }
+
     @Step("Get error message aria-live attribute")
     public String getErrorMessageAriaLive() {
         WebElement errorMsg = driver.findElement(By.cssSelector(".error-message"));
