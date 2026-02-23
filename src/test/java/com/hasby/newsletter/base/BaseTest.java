@@ -4,14 +4,12 @@ import com.hasby.newsletter.pages.SignupPage;
 import com.hasby.newsletter.pages.SuccessModalPage;
 import com.hasby.newsletter.utils.DriverFactory;
 import com.hasby.newsletter.utils.ScreenshotExtension;
-import com.hasby.newsletter.utils.ScreenshotUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.openqa.selenium.WebDriver;
-import org.junit.jupiter.api.TestInfo;
 
 @ExtendWith(ScreenshotExtension.class)
 public class BaseTest {
@@ -22,9 +20,6 @@ public class BaseTest {
     protected SignupPage signupPage;
     protected SuccessModalPage modalPage;
     protected static final String BASE_URL = "https://hasby-shanessa.github.io/news_letter_webDev/";
-
-    // Tracks if current test failed (for screenshot capture)
-    private boolean testFailed = false;
 
 //    Creates a fresh browser instance and navigates to the base URL
     @BeforeEach

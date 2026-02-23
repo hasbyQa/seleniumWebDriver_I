@@ -1,0 +1,6 @@
+email,reason
+testexample.com,missing @ symbol
+test@,missing domain
+test@company,missing TLD
+@example.com,missing local part
+test @example.com,contains space

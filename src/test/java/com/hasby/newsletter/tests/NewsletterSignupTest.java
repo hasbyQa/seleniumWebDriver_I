@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.CsvFileSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -124,19 +124,15 @@ public class NewsletterSignupTest extends BaseTest {
 
 //    Parameterized tests
     @ParameterizedTest(name = "N2-N4 - Invalid email: {0} ({1})")
-    @CsvSource({
-            "testexample.com, missing @ symbol",
-            "test@, missing domain",
-            "test@company, missing TLD"
-    })
+    @CsvFileSource(resources = "/test-data/invalid-emails.csv", numLinesToSkip = 1)
     @Story("Email Validation")
     @Severity(SeverityLevel.NORMAL)
     @Description("Verify that various invalid email formats trigger validation error")
-    void testInvalidEmailShowsError(String invalidEmail, String reason) {
+    void testInvalidEmailShowsError(String email, String reason) {
         logger.info("TEST: Invalid email - {}", reason);
 
-        signupPage.submitEmail(invalidEmail);
-        logger.info("Submitted invalid email: {} ({})", invalidEmail, reason);
+        signupPage.submitEmail(email);
+        logger.info("Submitted invalid email: {} ({})", email, reason);
 
         signupPage.waitForError();
 
