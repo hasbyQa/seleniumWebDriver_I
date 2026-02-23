@@ -321,7 +321,104 @@ jobs:
           echo "Slack response code: $RESPONSE"
           echo "Slack response body: $(cat /tmp/slack_response.txt)"
 
-      # Send detailed email notification with bug report + skipped details
+      # Build the email HTML body with full details from test result files
+      - name: Build email body
+        if: always()
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_MSG: ${{ github.event.head_commit.message || 'PR event' }}
+          ACTOR: ${{ github.actor }}
+          TOTAL: ${{ steps.test_results.outputs.total }}
+          PASSED: ${{ steps.test_results.outputs.passed }}
+          FAILURES: ${{ steps.test_results.outputs.failures }}
+          ERRORS: ${{ steps.test_results.outputs.errors }}
+          SKIPPED: ${{ steps.test_results.outputs.skipped }}
+          STATUS: ${{ steps.test_results.outputs.status }}
+          OUTCOME: ${{ steps.run_tests.outcome }}
+          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_NUMBER: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
+        run: |
+          # Read details from files
+          FAIL_DETAILS=$(cat /tmp/failure_details.txt 2>/dev/null || echo "Could not read failure details")
+          SKIP_DETAILS=$(cat /tmp/skipped_details.txt 2>/dev/null || echo "Could not read skipped details")
+
+          # Escape HTML special characters
+          FAIL_HTML=$(echo "$FAIL_DETAILS" | python3 -c "import sys,html; print(html.escape(sys.stdin.read()))")
+          SKIP_HTML=$(echo "$SKIP_DETAILS" | python3 -c "import sys,html; print(html.escape(sys.stdin.read()))")
+          COMMIT_HTML=$(echo "$COMMIT_MSG" | python3 -c "import sys,html; print(html.escape(sys.stdin.read()))")
+
+          # Set colors based on outcome
+          if [ "$OUTCOME" == "success" ]; then
+            STATUS_COLOR="#28a745"
+          else
+            STATUS_COLOR="#dc3545"
+          fi
+
+          # Build the full HTML email
+          cat > /tmp/email_body.html << HTMLEOF
+          <html>
+          <body style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: ${STATUS_COLOR};">${STATUS}</h2>
+
+            <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+              <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Repository</strong></td>
+                  <td style="padding: 8px; border: 1px solid #ddd;">${REPO}</td></tr>
+              <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Branch</strong></td>
+                  <td style="padding: 8px; border: 1px solid #ddd;">${BRANCH}</td></tr>
+              <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Commit</strong></td>
+                  <td style="padding: 8px; border: 1px solid #ddd;">${COMMIT_HTML}</td></tr>
+              <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Triggered by</strong></td>
+                  <td style="padding: 8px; border: 1px solid #ddd;">${ACTOR}</td></tr>
+            </table>
+
+            <h3>Test Results</h3>
+            <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+              <tr style="background: #f5f5f5;">
+                <th style="padding: 8px; border: 1px solid #ddd;">Total</th>
+                <th style="padding: 8px; border: 1px solid #ddd; color: green;">Passed</th>
+                <th style="padding: 8px; border: 1px solid #ddd; color: red;">Failed</th>
+                <th style="padding: 8px; border: 1px solid #ddd;">Errors</th>
+                <th style="padding: 8px; border: 1px solid #ddd; color: orange;">Skipped</th>
+              </tr>
+              <tr style="text-align: center;">
+                <td style="padding: 8px; border: 1px solid #ddd;">${TOTAL}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${PASSED}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${FAILURES}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${ERRORS}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${SKIPPED}</td>
+              </tr>
+            </table>
+
+            <h3>🐛 Failed Test Details</h3>
+            <pre style="background: #f8f8f8; padding: 16px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #ddd; white-space: pre-wrap;">${FAIL_HTML}</pre>
+
+            <h3>⏭️ Skipped/Disabled Tests</h3>
+            <pre style="background: #fff8e1; padding: 16px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #ffe082; white-space: pre-wrap;">${SKIP_HTML}</pre>
+
+            <p>📸 <strong>Screenshots</strong> are available in the Allure report artifact.</p>
+
+            <p>
+              <a href="${RUN_URL}"
+                 style="display: inline-block; background: #0366d6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">
+                View Full Report &amp; Download Artifacts
+              </a>
+            </p>
+
+            <hr style="margin: 24px 0;">
+            <p style="color: #666; font-size: 12px;">
+              Automated report from GitHub Actions CI pipeline<br>
+              Run #${RUN_NUMBER} | ${SHA}
+            </p>
+          </body>
+          </html>
+          HTMLEOF
+
+          echo "Email body built successfully"
+
+      # Send detailed email notification using the built HTML file
       - name: Notify via Email
         if: always()
         continue-on-error: true
@@ -334,64 +431,7 @@ jobs:
           subject: "CI Report: ${{ steps.test_results.outputs.status }} - ${{ github.repository }}"
           to: ${{ secrets.NOTIFICATION_EMAIL }}
           from: "CI Test Bot <${{ secrets.NOTIFICATION_EMAIL }}>"
-          html_body: |
-            <html>
-            <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: ${{ steps.run_tests.outcome == 'success' && '#28a745' || '#dc3545' }};">
-                ${{ steps.test_results.outputs.status }}
-              </h2>
-
-              <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
-                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Repository</strong></td>
-                    <td style="padding: 8px; border: 1px solid #ddd;">${{ github.repository }}</td></tr>
-                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Branch</strong></td>
-                    <td style="padding: 8px; border: 1px solid #ddd;">${{ github.ref_name }}</td></tr>
-                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Commit</strong></td>
-                    <td style="padding: 8px; border: 1px solid #ddd;">${{ github.event.head_commit.message || 'PR event' }}</td></tr>
-                <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Triggered by</strong></td>
-                    <td style="padding: 8px; border: 1px solid #ddd;">${{ github.actor }}</td></tr>
-              </table>
-
-              <h3>Test Results</h3>
-              <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
-                <tr style="background: #f5f5f5;">
-                  <th style="padding: 8px; border: 1px solid #ddd;">Total</th>
-                  <th style="padding: 8px; border: 1px solid #ddd; color: green;">Passed</th>
-                  <th style="padding: 8px; border: 1px solid #ddd; color: red;">Failed</th>
-                  <th style="padding: 8px; border: 1px solid #ddd;">Errors</th>
-                  <th style="padding: 8px; border: 1px solid #ddd; color: orange;">Skipped</th>
-                </tr>
-                <tr style="text-align: center;">
-                  <td style="padding: 8px; border: 1px solid #ddd;">${{ steps.test_results.outputs.total }}</td>
-                  <td style="padding: 8px; border: 1px solid #ddd;">${{ steps.test_results.outputs.passed }}</td>
-                  <td style="padding: 8px; border: 1px solid #ddd;">${{ steps.test_results.outputs.failures }}</td>
-                  <td style="padding: 8px; border: 1px solid #ddd;">${{ steps.test_results.outputs.errors }}</td>
-                  <td style="padding: 8px; border: 1px solid #ddd;">${{ steps.test_results.outputs.skipped }}</td>
-                </tr>
-              </table>
-
-              <h3>🐛 Failed Test Details</h3>
-              <pre style="background: #f8f8f8; padding: 16px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #ddd;">${{ steps.run_tests.outcome == 'failure' && '(See Allure report for full failure details)' || 'All tests passed!' }}</pre>
-
-              <h3>⏭️ Skipped/Disabled Tests</h3>
-              <pre style="background: #fff8e1; padding: 16px; border-radius: 4px; overflow-x: auto; font-size: 12px; border: 1px solid #ffe082;">${{ steps.test_results.outputs.skipped != '0' && '(Skipped tests detected — see Allure report for disabled test reasons and bug details)' || 'No skipped tests' }}</pre>
-
-              <p>📸 <strong>Screenshots</strong> are available in the Allure report artifact.</p>
-
-              <p>
-                <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                   style="background: #0366d6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">
-                  View Full Report & Download Artifacts
-                </a>
-              </p>
-
-              <hr style="margin: 24px 0;">
-              <p style="color: #666; font-size: 12px;">
-                Automated report from GitHub Actions CI pipeline<br>
-                Run #${{ github.run_number }} | ${{ github.sha }}
-              </p>
-            </body>
-            </html>
+          html_body: file:///tmp/email_body.html
 
       # Mark pipeline as failed if tests failed (shows red X on GitHub)
       - name: Check test outcome
